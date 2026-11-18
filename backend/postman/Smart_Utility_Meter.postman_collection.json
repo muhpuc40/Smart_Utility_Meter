@@ -1,0 +1,2234 @@
+{
+  "info": {
+    "name": "Smart Utility Meter API",
+    "description": "Express.js + Supabase backend for the ESP32 prepaid energy + water meter.\n\nHOW TO USE\n1. Set the collection variables base_url, admin_email and admin_password (Variables tab).\n2. Run the whole collection with the Collection Runner (top to bottom), or send requests one by one in order.\n3. Tokens, consumer_id, meter_id, device_key and recharge IDs are saved automatically by the test scripts.\n\nEach run creates a NEW test consumer (random phone) and deletes it in \"99 · Cleanup\".\nLogin is rate-limited to 10 attempts per 15 minutes per IP: if you get 429, wait or restart the server.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "admin_email",
+      "value": "admin@example.com"
+    },
+    {
+      "key": "admin_password",
+      "value": "yourpassword"
+    },
+    {
+      "key": "consumer_password",
+      "value": "test123"
+    },
+    {
+      "key": "admin_token",
+      "value": ""
+    },
+    {
+      "key": "consumer_token",
+      "value": ""
+    },
+    {
+      "key": "admin_id",
+      "value": ""
+    },
+    {
+      "key": "new_admin_id",
+      "value": ""
+    },
+    {
+      "key": "consumer_id",
+      "value": ""
+    },
+    {
+      "key": "consumer_phone",
+      "value": ""
+    },
+    {
+      "key": "meter_id",
+      "value": ""
+    },
+    {
+      "key": "device_key",
+      "value": ""
+    },
+    {
+      "key": "recharge_id",
+      "value": ""
+    },
+    {
+      "key": "reject_recharge_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "00 · Health",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/health",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('status ok', () => pm.expect(json.status).to.eql('ok'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 · Admin · Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('admin_token', json.data.token);",
+                  "pm.collectionVariables.set('admin_id', json.data.admin.id);",
+                  "pm.test('token saved', () => pm.expect(json.data.token).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (wrong password) → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"wrong-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/auth/password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"{{admin_password}}\",\n  \"new_password\": \"{{admin_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sets the same password again so the collection stays re-runnable. Change new_password to really change it."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "02 · Admin · Dashboard",
+      "item": [
+        {
+          "name": "Dashboard stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/dashboard"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('has meters + consumers', () => { pm.expect(json.data).to.have.property('meters'); pm.expect(json.data).to.have.property('consumers'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "03 · Admin · Admin Users",
+      "item": [
+        {
+          "name": "List admins",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/admins"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/admins",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Admin\",\n  \"email\": \"admin{{$timestamp}}@test.com\",\n  \"password\": \"admin123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('new_admin_id', json.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update admin (deactivate)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/admins/{{new_admin_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Admin (inactive)\",\n  \"is_active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('inactive', () => pm.expect(json.data.is_active).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deactivate self → 400",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/admins/{{admin_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "04 · Admin · Tariff",
+      "item": [
+        {
+          "name": "Get tariff",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/tariff"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update tariff",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/tariff",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"electricity_rate\": 8,\n  \"water_rate\": 18,\n  \"min_balance\": 0.01\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "electricity_rate: Tk per kWh · water_rate: Tk per 1000 L · min_balance: relay OFF at or below (Tk)"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('rates saved', () => { pm.expect(json.data.electricity_rate).to.eql(8); pm.expect(json.data.water_rate).to.eql(18); });"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "05 · Admin · Consumers",
+      "item": [
+        {
+          "name": "Create consumer + meter",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/consumers",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Consumer\",\n  \"phone\": \"{{consumer_phone}}\",\n  \"email\": \"consumer{{$timestamp}}@test.com\",\n  \"address\": \"Chattogram\",\n  \"password\": \"{{consumer_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Returns device.meter_id and device.device_key ONCE. Put both in smart_meter.ino. Omit meter_id to auto-generate MTR-0001, MTR-0002, ..."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// random Bangladeshi mobile number for a fresh test consumer",
+                  "const phone = '017' + Math.floor(10000000 + Math.random() * 89999999);",
+                  "pm.collectionVariables.set('consumer_phone', phone);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('consumer_id', json.data.consumer.id);",
+                  "pm.collectionVariables.set('meter_id', json.data.device.meter_id);",
+                  "pm.collectionVariables.set('device_key', json.data.device.device_key);",
+                  "pm.test('device key returned', () => pm.expect(json.data.device.device_key).to.have.lengthOf(32));",
+                  "pm.test('starts with 0 balance', () => pm.expect(json.data.consumer.meter.balance).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create consumer (invalid phone) → 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/consumers",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bad\",\n  \"phone\": \"12345\",\n  \"password\": \"abc123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create consumer (duplicate phone) → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/consumers",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Duplicate\",\n  \"phone\": \"{{consumer_phone}}\",\n  \"password\": \"abc123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List consumers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/consumers?page=1&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search consumers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/consumers?search=Test&status=active"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter by meter ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/consumers?meter_id={{meter_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('found 1', () => pm.expect(json.data).to.have.lengthOf(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get consumer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/consumers/{{consumer_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update consumer",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/consumers/{{consumer_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Consumer Updated\",\n  \"address\": \"Agrabad, Chattogram\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('name updated', () => pm.expect(json.data.name).to.eql('Test Consumer Updated'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Suspend consumer",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/consumers/{{consumer_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"suspended\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('suspended', () => pm.expect(json.data.status).to.eql('suspended'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activate consumer",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/consumers/{{consumer_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('active', () => pm.expect(json.data.status).to.eql('active'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset consumer password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/consumers/{{consumer_id}}/reset-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"{{consumer_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "06 · Meter (ESP32) · Before Recharge",
+      "item": [
+        {
+          "name": "GET balance → relay OFF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/meter/{{meter_id}}/balance?key={{device_key}}",
+            "description": "Used by the ESP32 every 30 s. Supply is OFF by default (no balance yet)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('relay off', () => pm.expect(json.relay).to.eql('off'));",
+                  "pm.test('state no_balance', () => pm.expect(json.state).to.eql('no_balance'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET balance (wrong key) → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/meter/{{meter_id}}/balance?key=wrongkey"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST consumption (first = baseline)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/consumer/meter/{{meter_id}}/consumption?key={{device_key}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"voltage\": 229.4,\n  \"current\": 0.452,\n  \"power\": 98.2,\n  \"frequency\": 50,\n  \"pf\": 0.95,\n  \"flow_rate\": 0,\n  \"energy_kwh\": 10,\n  \"water_l\": 500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "energy_kwh = PZEM energy counter, water_l = ESP32 total water counter. The first report only sets the billing baseline."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('baseline, cost 0', () => pm.expect(json.cost).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST consumption (invalid body) → 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/consumer/meter/{{meter_id}}/consumption?key={{device_key}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"voltage\": \"abc\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "07 · Consumer · Auth",
+      "item": [
+        {
+          "name": "Login (phone)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/consumer/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{consumer_phone}}\",\n  \"password\": \"{{consumer_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('consumer_token', json.data.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (meter ID)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/consumer/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{meter_id}}\",\n  \"password\": \"{{consumer_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('consumer_token', json.data.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (wrong password) → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/consumer/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{consumer_phone}}\",\n  \"password\": \"wrong-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "08 · Consumer · Account",
+      "item": [
+        {
+          "name": "Get profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/profile"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('has meter + tariff', () => { pm.expect(json.data.meter.meter_id).to.eql(pm.collectionVariables.get('meter_id')); pm.expect(json.data).to.have.property('tariff'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/consumer/profile",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Consumer\",\n  \"address\": \"GEC, Chattogram\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/consumer/password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"{{consumer_password}}\",\n  \"new_password\": \"{{consumer_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sets the same password again so the collection stays re-runnable."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get balance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('balance 0', () => pm.expect(json.data.balance).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin token on consumer route → 403",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/profile",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{consumer_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "09 · Consumer · Recharges",
+      "item": [
+        {
+          "name": "Create recharge (bKash)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/consumer/recharges",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 100,\n  \"method\": \"bkash\",\n  \"transaction_ref\": \"BK{{$timestamp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Saved as pending until an admin approves (unless AUTO_APPROVE_RECHARGE=true)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('recharge_id', json.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create recharge (to reject)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/consumer/recharges",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500,\n  \"method\": \"nagad\",\n  \"transaction_ref\": \"NG{{$timestamp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('reject_recharge_id', json.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create recharge (cash) → 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/consumer/recharges",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50,\n  \"method\": \"cash\",\n  \"transaction_ref\": \"CASH1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Cash recharges can only be entered by an admin."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List my recharges",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/recharges?page=1&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{consumer_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "10 · Admin · Recharges",
+      "item": [
+        {
+          "name": "List pending recharges",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/recharges?status=pending"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve recharge",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{base_url}}/admin/recharges/{{recharge_id}}/approve"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('balance credited', () => pm.expect(json.data.balance_after).to.be.at.least(100));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve again → 409",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{base_url}}/admin/recharges/{{recharge_id}}/approve"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject recharge",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/recharges/{{reject_recharge_id}}/reject",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Transaction ID not found\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('rejected', () => pm.expect(json.data.status).to.eql('rejected'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin top-up (cash)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/recharges",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meter_id\": \"{{meter_id}}\",\n  \"amount\": 50,\n  \"method\": \"cash\",\n  \"note\": \"Paid at office\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Credited immediately."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test('balance 150', () => pm.expect(json.data.balance_after).to.eql(150));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List all recharges (filters)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/recharges?meter_id={{meter_id}}&page=1&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "11 · Meter (ESP32) · After Recharge",
+      "item": [
+        {
+          "name": "GET balance → relay ON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/meter/{{meter_id}}/balance?key={{device_key}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('relay on', () => pm.expect(json.relay).to.eql('on'));",
+                  "pm.test('balance 150', () => pm.expect(json.balance).to.eql(150));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST consumption (billed)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/consumer/meter/{{meter_id}}/consumption?key={{device_key}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"voltage\": 228.9,\n  \"current\": 1.21,\n  \"power\": 265.4,\n  \"frequency\": 50,\n  \"pf\": 0.96,\n  \"flow_rate\": 2.4,\n  \"energy_kwh\": 11.5,\n  \"water_l\": 1500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "1.5 kWh x 8 Tk + 1000 L x 18 Tk/1000 L = 30 Tk"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('cost 30 Tk', () => pm.expect(json.cost).to.eql(30));",
+                  "pm.test('balance 120', () => pm.expect(json.balance).to.eql(120));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST same counters again (not billed twice)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/consumer/meter/{{meter_id}}/consumption?key={{device_key}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"voltage\": 228.9,\n  \"current\": 1.21,\n  \"power\": 265.4,\n  \"frequency\": 50,\n  \"pf\": 0.96,\n  \"flow_rate\": 0,\n  \"energy_kwh\": 11.5,\n  \"water_l\": 1500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('cost 0', () => pm.expect(json.cost).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST with PZEM error (nulls)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/consumer/meter/{{meter_id}}/consumption?key={{device_key}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"voltage\": null,\n  \"current\": null,\n  \"power\": null,\n  \"frequency\": null,\n  \"pf\": null,\n  \"flow_rate\": 0,\n  \"energy_kwh\": null,\n  \"water_l\": 1500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('cost 0', () => pm.expect(json.cost).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "12 · Consumer · Usage + Transactions",
+      "item": [
+        {
+          "name": "Usage summary (last 30 days)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/usage/summary"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('total cost 30', () => pm.expect(json.data.totals.total_cost).to.eql(30));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Usage summary (date range)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/usage/summary?from=2026-11-01&to=2026-12-31"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Readings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/usage/readings?page=1&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/transactions?page=1&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Balance after usage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('relay on', () => pm.expect(json.data.relay).to.eql('on'));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{consumer_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "13 · Admin · Meters",
+      "item": [
+        {
+          "name": "List meters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/meters?page=1&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List online meters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/meters?online=true"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List offline meters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/meters?online=false"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get meter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/meters/{{meter_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('online', () => pm.expect(json.data.online).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Meter readings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/meters/{{meter_id}}/readings?page=1&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Meter daily usage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/meters/{{meter_id}}/usage"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Adjust balance (debit)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/meters/{{meter_id}}/adjust",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": -20,\n  \"note\": \"Correction\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Positive amount = credit, negative = debit. Note is required."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('balance 100', () => pm.expect(json.data.balance_after).to.eql(100));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Adjust below zero → 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/meters/{{meter_id}}/adjust",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": -100000,\n  \"note\": \"Too much\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disable meter",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/meters/{{meter_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"disabled\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('relay off', () => pm.expect(json.data.relay).to.eql('off'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ESP32 sees meter_disabled",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/meter/{{meter_id}}/balance?key={{device_key}}",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('meter_disabled', () => pm.expect(json.state).to.eql('meter_disabled'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Enable meter",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/meters/{{meter_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('relay on', () => pm.expect(json.data.relay).to.eql('on'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Regenerate device key",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/admin/meters/{{meter_id}}/regenerate-key",
+            "description": "The old key stops working immediately. Re-flash the ESP32 with the new key."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('device_key', json.data.device_key);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ESP32 with new key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/consumer/meter/{{meter_id}}/balance?key={{device_key}}",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "14 · Admin · Transactions",
+      "item": [
+        {
+          "name": "List transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/transactions?page=1&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transactions for meter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/transactions?meter_id={{meter_id}}&type=recharge"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('2 recharges', () => pm.expect(json.meta.total).to.eql(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dashboard after test",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/dashboard"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "99 · Cleanup",
+      "item": [
+        {
+          "name": "Delete test consumer",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/admin/consumers/{{consumer_id}}",
+            "description": "Deletes the test consumer, its meter, readings and recharges. Skip this request to keep the data."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deleted consumer → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/consumers/{{consumer_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{admin_token}}",
+            "type": "string"
+          }
+        ]
+      }
+    }
+  ]
+}
