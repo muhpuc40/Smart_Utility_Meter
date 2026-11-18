@@ -46,7 +46,7 @@
 // consumer is created (POST /admin/consumers).
 // ============================================================
 
-const char SERVER_URL[] = "http://192.168.0.103:3000";
+const char SERVER_URL[] = "https://smart-meter-api-do5b.onrender.com";
 const char METER_ID[] = "MTR-0001";
 const char DEVICE_KEY[] = "587b87310f8037831afb8999e16ce285";
 
