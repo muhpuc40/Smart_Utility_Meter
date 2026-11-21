@@ -259,6 +259,48 @@
               }
             }
           ]
+        },
+        {
+          "name": "Daily report (last 30 days)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/reports/daily",
+            "description": "Per-day electricity, water, billed and recharged amounts for all meters. Optional ?from=&to= (ISO dates)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('30+ days with totals', () => { pm.expect(json.data.daily.length).to.be.at.least(30); pm.expect(json.data).to.have.property('totals'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Top meters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/reports/top-meters?limit=5",
+            "description": "Meters with the highest billing in the period. Optional ?from=&to=&limit= (max 50)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         }
       ],
       "auth": {
@@ -359,6 +401,39 @@
                   "pm.test('Status 200', () => pm.response.to.have.status(200));",
                   "const json = pm.response.json();",
                   "pm.test('inactive', () => pm.expect(json.data.is_active).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset admin password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/admin/admins/{{new_admin_id}}/reset-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"reset123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
                 ]
               }
             }
@@ -1819,6 +1894,28 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Low balance meters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/admin/meters?max_balance=50",
+            "description": "Meters with balance at or below max_balance (Tk)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('all at or below 50', () => json.data.forEach((m) => pm.expect(m.balance).to.be.at.most(50)));"
                 ]
               }
             }

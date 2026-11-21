@@ -90,6 +90,7 @@ export const listMeters = z.object({
   search: z.string().trim().max(32).optional(),
   status: z.enum(['active', 'disabled']).optional(),
   online: z.enum(['true', 'false']).optional(),
+  max_balance: z.coerce.number().min(0).optional(),   // low-balance filter (Tk)
 });
 
 export const meterStatus = z.object({
@@ -149,6 +150,19 @@ export const adminRecharge = z.object({
 
 export const rejectRecharge = z.object({
   reason: optionalText(300).optional(),
+});
+
+// ------------------------------------------------------------
+// Reports
+// ------------------------------------------------------------
+
+export const dailyReport = z.object({
+  ...dateRange,
+});
+
+export const topMeters = z.object({
+  ...dateRange,
+  limit: z.coerce.number().int().min(1).max(50).default(5),
 });
 
 export const listTransactions = z.object({

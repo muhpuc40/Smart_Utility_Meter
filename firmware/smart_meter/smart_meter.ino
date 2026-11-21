@@ -44,9 +44,13 @@
 // METER IDENTITY + SERVER
 // METER_ID and DEVICE_KEY are given by the admin panel when the
 // consumer is created (POST /admin/consumers).
+//
+// SERVER_URL must be plain http:// - the SIM900A cannot do modern
+// HTTPS. Use the Cloudflare Worker relay URL (cloudflare-worker/),
+// which forwards to Render over HTTPS. Do NOT use the onrender.com URL.
 // ============================================================
 
-const char SERVER_URL[] = "https://smart-meter-api-do5b.onrender.com";
+const char SERVER_URL[] = "http://flat-butterfly-aa1c.mdhassan49-muh.workers.dev";
 const char METER_ID[] = "MTR-0001";
 const char DEVICE_KEY[] = "587b87310f8037831afb8999e16ce285";
 
@@ -107,6 +111,13 @@ const unsigned long HTTP_READ_TIMEOUT = 10000;
 // Teletalk APN: must match the APN in your phone's
 // Settings > Mobile network > Access Point Names
 const char GPRS_APN[] = "internet";
+
+// Public DNS used when the mobile network DNS fails (HTTP 603)
+const char DNS_PRIMARY[] = "8.8.8.8";
+const char DNS_SECONDARY[] = "1.1.1.1";
+
+// true = print every AT command and modem reply in Serial Monitor
+const bool SIM_DEBUG = true;
 
 const int SIM_BAUD_RATES[] = {9600, 19200, 38400, 57600, 115200};
 const int SIM_BAUD_COUNT = sizeof(SIM_BAUD_RATES) / sizeof(SIM_BAUD_RATES[0]);
@@ -265,6 +276,29 @@ void logMessage(const char *tag, const String &message) {
   serialUnlock();
 }
 
+// Meaning of HTTP status codes as reported by the SIM900A
+const char *statusMeaning(int statusCode) {
+  switch (statusCode) {
+    case 200: return "OK";
+    case 301:
+    case 302:
+    case 307:
+    case 308: return "REDIRECT TO HTTPS - use the http:// Worker URL";
+    case 401: return "WRONG METER_ID OR DEVICE_KEY";
+    case 404: return "WRONG URL / ROUTE";
+    case 422: return "INVALID DATA SENT";
+    case 429: return "TOO MANY REQUESTS";
+    case 500: return "SERVER ERROR";
+    case 502:
+    case 503: return "BACKEND DOWN OR WAKING UP";
+    case 601: return "SIM900A NETWORK ERROR - check data balance / APN";
+    case 602: return "SIM900A OUT OF MEMORY";
+    case 603: return "SIM900A DNS ERROR - host name not resolved";
+    case 604: return "SIM900A STACK BUSY";
+    default:  return "";
+  }
+}
+
 void printStatusCode(int statusCode) {
   if (statusCode == 0) {
     Serial.println("NOT SENT");
@@ -272,12 +306,10 @@ void printStatusCode(int statusCode) {
   else if (statusCode < 0) {
     Serial.println("NO RESPONSE (modem error)");
   }
-  else if (statusCode >= 600) {
-    Serial.print(statusCode);
-    Serial.println(" (SIM900A network error)");
-  }
   else {
-    Serial.println(statusCode);
+    Serial.print(statusCode);
+    Serial.print(" ");
+    Serial.println(statusMeaning(statusCode));
   }
 }
 
@@ -540,6 +572,13 @@ void printStartupInfo() {
 
   Serial.println("Supply is OFF until the server allows it.");
   Serial.println("GET balance every 30 s, POST consumption every 1 min.");
+
+  if (strncmp(SERVER_URL, "https://", 8) == 0) {
+    Serial.println("\n!!! SERVER_URL uses https:// !!!");
+    Serial.println("The SIM900A cannot connect to HTTPS servers.");
+    Serial.println("Use the http:// Cloudflare Worker URL instead.");
+  }
+
   Serial.println("======================================");
 
   serialUnlock();
@@ -714,10 +753,32 @@ bool simWaitFor(const char *expected, unsigned long timeout, String *response) {
   return false;
 }
 
+// Modem reply on one line for the debug log
+String compactResponse(const String &response) {
+  String text = response;
+
+  text.replace("\r", "");
+  text.trim();
+  text.replace("\n\n", "\n");
+  text.replace("\n", " | ");
+
+  return text.length() > 0 ? text : "(no reply)";
+}
+
 bool simCommand(const char *command, const char *expected, unsigned long timeout, String *response) {
+  String reply;
+
   simFlush();
   sim900.println(command);
-  return simWaitFor(expected, timeout, response);
+
+  bool success = simWaitFor(expected, timeout, &reply);
+
+  if (SIM_DEBUG) {
+    logMessage("AT", String(command) + "  ->  " + compactResponse(reply));
+  }
+
+  if (response != nullptr) *response = reply;
+  return success;
 }
 
 // ============================================================
@@ -873,6 +934,12 @@ bool connectGPRS() {
     return false;
   }
 
+  // Fallback DNS servers in case the network DNS fails (603).
+  // An ERROR reply here is harmless.
+  char dnsCommand[64];
+  snprintf(dnsCommand, sizeof(dnsCommand), "AT+CDNSCFG=\"%s\",\"%s\"", DNS_PRIMARY, DNS_SECONDARY);
+  simCommand(dnsCommand, "OK", 2000, nullptr);
+
   setNetworkStatus("ONLINE");
   logMessage("GPRS", "Connected, IP: " + ipAddress);
   return true;
@@ -954,7 +1021,7 @@ int httpRequest(HttpMethod method, const char *url, const String &payload, Strin
 
   responseBody = "";
 
-  // Close any session left open by a previous failed request
+  // Close any session left open by a previous failed request (ERROR here is normal)
   simCommand("AT+HTTPTERM", "OK", 1000, nullptr);
 
   if (!simCommand("AT+HTTPINIT", "OK", 2000, nullptr)) return -1;

@@ -38,6 +38,7 @@ export async function listMeters(req, res) {
     .range(from, to);
 
   if (query.status) request = request.eq('status', query.status);
+  if (query.max_balance !== undefined) request = request.lte('balance', query.max_balance);
 
   if (query.search) {
     const term = query.search.replace(/[,()*%\\]/g, ' ').trim();

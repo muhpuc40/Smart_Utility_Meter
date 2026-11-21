@@ -47,6 +47,9 @@ The server turns the relay OFF when:
 2. **SQL Editor → New query** → paste all of `backend/supabase/schema.sql` → **Run**.
 3. **Project Settings → API**: copy the **Project URL** and the **service_role** key.
 
+> **Updating an existing database:** run `backend/supabase/migrations/002_admin_reports.sql` (admin panel reports).
+> `schema.sql` is safe to run again; it already includes every migration.
+
 ### 2. Environment
 ```bash
 cd backend
@@ -79,6 +82,74 @@ The admin and consumer panels can still use HTTPS through Nginx. The device key 
 
 Tokens, `meter_id`, `device_key` and recharge IDs are saved automatically between requests.
 Login is limited to 10 attempts per 15 minutes per IP, so after about 2 full runs you may get `429`. Wait, or restart the server.
+
+---
+
+## Free deployment: Render + Cloudflare Worker (no domain needed)
+
+```
+ESP32 ──HTTP──▶ Cloudflare Worker (*.workers.dev, free) ──HTTPS──▶ Render (free) ──▶ Supabase
+Panels ─────────────────HTTPS───────────────────────────────────▶ Render
+```
+`*.workers.dev` accepts plain HTTP without redirecting. `cloudflare-worker/worker.js` forwards only the
+meter routes (`/consumer/meter/...` and `/health`) to Render over HTTPS.
+
+1. dash.cloudflare.com → **Workers & Pages → Create → Start with Hello World → Deploy**.
+2. **Edit code** → replace everything with `cloudflare-worker/worker.js` (set `ORIGIN` to your Render URL) → **Deploy**.
+3. Test from your PC (both must return 200, and the first one must NOT be a 301):
+   ```
+   curl -i http://<worker>.<account>.workers.dev/health
+   curl -i "http://<worker>.<account>.workers.dev/consumer/meter/MTR-0001/balance?key=DEVICE_KEY"
+   ```
+4. In the `.ino`: `const char SERVER_URL[] = "http://<worker>.<account>.workers.dev";`
+
+---
+
+## Alternative: Render + Cloudflare custom domain
+
+```
+ESP32 ──HTTP──▶ Cloudflare (Always Use HTTPS OFF) ──HTTPS──▶ Render (free) ──▶ Supabase
+Panels ─HTTPS─▶ Cloudflare ────────────────────────HTTPS──▶ Render
+```
+Render alone forces HTTPS, which the SIM900A cannot do. Cloudflare accepts the meter's plain HTTP and forwards it to Render over HTTPS.
+
+**A. Push to GitHub.** Push this whole `Smart_Utility_Meter` folder (`render.yaml` must be at the repo root). `.env` is git-ignored.
+
+**B. Render**
+1. render.com → **New → Blueprint** → select the repo → it reads `render.yaml`.
+2. Enter `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` when asked (`JWT_SECRET` is generated).
+3. Deploy → open `https://smart-meter-api.onrender.com/health`.
+4. Create the first admin **from your PC** (free Render has no shell; the script only talks to Supabase):
+   `cd backend && npm install && npm run create-admin -- "Minhaj" you@mail.com yourpassword` (uses your local `.env`).
+
+**C. Cloudflare (free)**: the domain's DNS must be managed by Cloudflare.
+1. Cloudflare → **Add a domain** → Free plan. Check that the imported DNS records include **all** existing records
+   (website, subdomains, MX/email). Leave existing records **DNS only (grey)** so they keep working as before.
+2. At your domain registrar, replace the nameservers with the 2 Cloudflare nameservers. Wait until the domain shows **Active**.
+3. Render → service → **Settings → Custom Domains** → add `meter.yourdomain.com`.
+4. Cloudflare → DNS → add `CNAME meter → smart-meter-api.onrender.com`, **DNS only (grey)**.
+   Render → **Verify** → wait until the certificate is issued.
+5. Switch that record to **Proxied (orange)**.
+6. Cloudflare → **SSL/TLS → Overview → Full (strict)**.
+7. Cloudflare → **SSL/TLS → Edge Certificates → Always Use HTTPS: OFF**, and **HSTS: off**.
+8. Cloudflare → **Security → Bots → Bot Fight Mode: OFF** (it can block the SIM900A).
+
+**D. Test**
+```
+curl -i http://meter.yourdomain.com/health    →  200 (no 301 redirect)
+curl -i https://meter.yourdomain.com/health   →  200
+```
+Then set `base_url` in Postman to `https://meter.yourdomain.com` and run the collection.
+
+**E. ESP32**
+```cpp
+const char SERVER_URL[] = "http://meter.yourdomain.com";
+```
+
+Notes:
+- Free Render sleeps after 15 minutes without traffic. The meter calls every 30 s and keeps it awake. Only the first request after a long idle may time out once, and the next one works.
+- Free Render gives 750 hours/month, enough for one service running 24/7.
+- When the panels are on Netlify, set `CORS_ORIGINS` on Render to their URLs.
 
 ---
 
@@ -125,9 +196,12 @@ Auth header for panels: `Authorization: Bearer <token>`
 | GET | `/admin/auth/me` | |
 | PATCH | `/admin/auth/password` | `{ current_password, new_password }` |
 | GET | `/admin/dashboard` | |
+| GET | `/admin/reports/daily` | `?from=&to=` per-day electricity, water, billed, recharged (default 30 days) |
+| GET | `/admin/reports/top-meters` | `?from=&to=&limit=` highest billing meters |
 | GET | `/admin/admins` | |
 | POST | `/admin/admins` | `{ name, email, password }` |
 | PATCH | `/admin/admins/:id` | `{ name?, is_active? }` |
+| POST | `/admin/admins/:id/reset-password` | `{ password }` |
 | GET | `/admin/consumers` | `?search=&status=&meter_id=&page=&limit=` |
 | POST | `/admin/consumers` | `{ name, phone, password, email?, address?, meter_id? }` → returns `device_key` once |
 | GET | `/admin/consumers/:id` | |
@@ -135,7 +209,7 @@ Auth header for panels: `Authorization: Bearer <token>`
 | PATCH | `/admin/consumers/:id/status` | `{ status: "active" \| "suspended" }` |
 | POST | `/admin/consumers/:id/reset-password` | `{ password }` |
 | DELETE | `/admin/consumers/:id` | deletes consumer, meter and history |
-| GET | `/admin/meters` | `?search=&status=&online=true\|false&page=&limit=` |
+| GET | `/admin/meters` | `?search=&status=&online=true\|false&max_balance=&page=&limit=` |
 | GET | `/admin/meters/:meterId` | live values, totals, relay state |
 | PATCH | `/admin/meters/:meterId/status` | `{ status: "active" \| "disabled" }` |
 | POST | `/admin/meters/:meterId/regenerate-key` | returns the new `device_key` once |

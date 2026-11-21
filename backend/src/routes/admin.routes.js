@@ -13,6 +13,7 @@ import * as tariff from '../controllers/admin/tariff.controller.js';
 import * as recharges from '../controllers/admin/recharges.controller.js';
 import * as transactions from '../controllers/admin/transactions.controller.js';
 import * as dashboard from '../controllers/admin/dashboard.controller.js';
+import * as reports from '../controllers/admin/reports.controller.js';
 
 const router = Router();
 
@@ -35,12 +36,20 @@ router.patch('/auth/password', validate({ body: v.changePassword }), auth.change
 router.get('/dashboard', dashboard.getDashboard);
 
 // ------------------------------------------------------------
+// Reports (dashboard charts)
+// ------------------------------------------------------------
+
+router.get('/reports/daily', validate({ query: v.dailyReport }), reports.getDailyReport);
+router.get('/reports/top-meters', validate({ query: v.topMeters }), reports.getTopMeters);
+
+// ------------------------------------------------------------
 // Admin users
 // ------------------------------------------------------------
 
 router.get('/admins', admins.listAdmins);
 router.post('/admins', validate({ body: v.createAdmin }), admins.createAdmin);
 router.patch('/admins/:id', validate({ params: idParams, body: v.updateAdmin }), admins.updateAdmin);
+router.post('/admins/:id/reset-password', validate({ params: idParams, body: v.resetPassword }), admins.resetAdminPassword);
 
 // ------------------------------------------------------------
 // Consumers

@@ -29,6 +29,21 @@ export async function createAdmin(req, res) {
   created(res, admin);
 }
 
+// POST /admin/admins/:id/reset-password
+export async function resetAdminPassword(req, res) {
+  unwrap(
+    await supabase
+      .from('admins')
+      .update({ password_hash: await hashPassword(req.valid.body.password) })
+      .eq('id', req.valid.params.id)
+      .select('id')
+      .maybeSingle(),
+    'Admin not found',
+  );
+
+  res.json({ success: true, message: 'Admin password reset' });
+}
+
 // PATCH /admin/admins/:id
 export async function updateAdmin(req, res) {
   const { id } = req.valid.params;
